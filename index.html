@@ -94,7 +94,7 @@
       <button id="crop">Crop & Frame</button>
       <button id="edit">Edit Again</button>
       <button id="download">Download</button>
-      <button id="copy"></button>
+      <button id="copy">Copy & Save</button>
     </div>
     <div id="statusMessage" class="status-message"></div>
   </div>
@@ -181,7 +181,7 @@
       reader.onload = function (e) {
         const tempImg = new Image();
         tempImg.onload = function () {
-          const maxSize = 500;
+          const maxSize = 1200;
           let width = tempImg.width;
           let height = tempImg.height;
           if (width > height && width > maxSize) {
