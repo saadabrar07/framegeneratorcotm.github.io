@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Frame Picture Generator</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css" rel="stylesheet" />
+  <style>
+    /* [Previous CSS styles remain exactly the same] */
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #e0eafc, #cfdef3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    h1 {
+      margin: 20px;
+      color: #333;
+      font-size: 2rem;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      max-width: 600px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    #image, #canvas {
+      max-width: 100%;
+      max-height: 400px;
+      border-radius: 12px;
+    }
+    input[type="file"], button {
+      font-size: 1rem;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    input[type="file"] {
+      background-color: #28a745;
+      color: white;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+    }
+    button:hover {
+      background-color: #0056b3;
+      transform: scale(1.05);
+    }
+    #crop, #edit, #download, #copy {
+      display: none;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .status-message {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+  </style>
+</head>
+<body>
+  <h1>Frame Picture Generator</h1>
+  <div class="container">
+    <input type="file" id="upload" accept="image/*" />
+    <img id="image" style="display: none;" />
+    <canvas id="canvas" style="display: none;"></canvas>
+    <div class="button-group">
+      <button id="crop">Crop & Frame</button>
+      <button id="edit">Edit Again</button>
+      <button id="download">Download</button>
+      <button id="copy">Copy & Save</button>
+    </div>
+    <div id="statusMessage" class="status-message"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+  <script>
+    let cropper;
+    let originalImageSrc;
+    let finalImageReady = false;
+
+    const image = document.getElementById('image');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusMessage = document.getElementById('statusMessage');
+
+    function showStatus(message, isSuccess) {
+      statusMessage.textContent = message;
+      statusMessage.className = `status-message ${isSuccess ? 'success' : 'error'}`;
+      statusMessage.style.display = 'block';
+      setTimeout(() => {
+        statusMessage.style.display = 'none';
+      }, 3000);
+    }
+
+    // Universal download function that works across all browsers
+    function downloadImage() {
+      try {
+        // Method 1: Standard download approach
+        const dataURL = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = 'framed-image-' + new Date().getTime() + '.png';
+        link.href = dataURL;
+        
+        // For Firefox and some mobile browsers
+        if (typeof link.download === 'undefined') {
+          // Method 2: Open in new tab as fallback
+          const newWindow = window.open();
+          newWindow.document.write(`<img src="${dataURL}" />`);
+          showStatus("Image opened in new tab. Right-click to save.", true);
+          return;
+        }
+        
+        // Method 1 execution
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showStatus("Image downloaded successfully!", true);
+        
+        // Clean up memory
+        setTimeout(() => {
+          URL.revokeObjectURL(dataURL);
+        }, 100);
+        
+      } catch (err) {
+        console.error('Download error:', err);
+        
+        // Method 3: Alternative approach for problematic browsers
+        try {
+          canvas.toBlob(function(blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = 'framed-image-' + new Date().getTime() + '.png';
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => {
+              URL.revokeObjectURL(url);
+            }, 100);
+            showStatus("Image downloaded successfully!", true);
+          }, 'image/png');
+        } catch (err2) {
+          console.error('Alternative download error:', err2);
+          showStatus("Failed to download. Try right-clicking the image and selecting 'Save As'.", false);
+        }
+      }
+    }
+
+    document.getElementById('upload').addEventListener('change', function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const tempImg = new Image();
+        tempImg.onload = function () {
+          const maxSize = 500;
+          let width = tempImg.width;
+          let height = tempImg.height;
+          if (width > height && width > maxSize) {
+            height *= maxSize / width;
+            width = maxSize;
+          } else if (height > maxSize) {
+            width *= maxSize / height;
+            height = maxSize;
+          }
+
+          const offscreen = document.createElement('canvas');
+          offscreen.width = width;
+          offscreen.height = height;
+          offscreen.getContext('2d').drawImage(tempImg, 0, 0, width, height);
+          originalImageSrc = offscreen.toDataURL();
+
+          image.src = originalImageSrc;
+          image.style.display = 'block';
+          canvas.style.display = 'none';
+          document.getElementById('crop').style.display = 'inline-block';
+          document.getElementById('edit').style.display = 'none';
+          document.getElementById('download').style.display = 'none';
+          document.getElementById('copy').style.display = 'none';
+          finalImageReady = false;
+
+          if (cropper) cropper.destroy();
+          cropper = new Cropper(image, {
+            aspectRatio: 1,
+            viewMode: 1
+          });
+        };
+        tempImg.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('crop').addEventListener('click', function () {
+      const croppedCanvas = cropper.getCroppedCanvas();
+      const frameImg = new Image();
+
+      frameImg.onload = function () {
+        canvas.width = croppedCanvas.width;
+        canvas.height = croppedCanvas.height;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(croppedCanvas, 0, 0);
+        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+        image.style.display = 'none';
+        canvas.style.display = 'block';
+        document.getElementById('crop').style.display = 'none';
+        document.getElementById('edit').style.display = 'inline-block';
+        document.getElementById('download').style.display = 'inline-block';
+        document.getElementById('copy').style.display = 'inline-block';
+
+        finalImageReady = true;
+
+        cropper.destroy();
+      };
+
+      frameImg.onerror = function () {
+        showStatus("⚠️ 'frame.png' not found. Please place it in the same folder.", false);
+      };
+
+      frameImg.src = 'frame.png';
+    });
+
+    document.getElementById('edit').addEventListener('click', function () {
+      image.src = originalImageSrc;
+      image.style.display = 'block';
+      canvas.style.display = 'none';
+      document.getElementById('crop').style.display = 'inline-block';
+      document.getElementById('edit').style.display = 'none';
+      document.getElementById('download').style.display = 'none';
+      document.getElementById('copy').style.display = 'none';
+      finalImageReady = false;
+
+      if (cropper) cropper.destroy();
+      cropper = new Cropper(image, {
+        aspectRatio: 1,
+        viewMode: 1
+      });
+    });
+
+    document.getElementById('download').addEventListener('click', function () {
+      if (!finalImageReady) {
+        showStatus("Please crop and frame the image before downloading.", false);
+        return;
+      }
+      downloadImage();
+    });
+
+    document.getElementById('copy').addEventListener('click', async function () {
+      if (!finalImageReady) {
+        showStatus("Please crop and frame the image before copying.", false);
+        return;
+      }
+
+      // First ensure the image is downloaded
+      downloadImage();
+      
+      // Then try to copy to clipboard
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.write) {
+          showStatus("Image saved! Clipboard not available in this browser.", true);
+          return;
+        }
+
+        const blob = await new Promise(resolve => {
+          canvas.toBlob(resolve, 'image/png');
+        });
+        
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'image/png': blob
+          })
+        ]);
+        showStatus("Image copied to clipboard and saved!", true);
+      } catch (err) {
+        console.error('Clipboard error:', err);
+        showStatus("Image saved! Couldn't copy to clipboard.", true);
+      }
+    });
+  </script>
+</body>
+</html>
