@@ -43,7 +43,13 @@
       border-radius: 12px;
       touch-action: none;
     }
-    input[type="file"], button {
+    .upload-options {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      flex-direction: column;
+    }
+    button, .file-input-label {
       font-size: 0.9rem;
       padding: 12px 20px;
       border: none;
@@ -53,18 +59,26 @@
       width: 100%;
       box-sizing: border-box;
       -webkit-appearance: none;
+      text-align: center;
     }
-    input[type="file"] {
+    .file-input-label {
       background-color: #28a745;
       color: white;
+      display: block;
     }
     button {
       background-color: #007bff;
       color: white;
     }
-    button:hover, button:active {
-      background-color: #0056b3;
+    button:hover, button:active, .file-input-label:hover, .file-input-label:active {
+      opacity: 0.9;
       transform: scale(0.98);
+    }
+    #cameraInput {
+      display: none;
+    }
+    #galleryInput {
+      display: none;
     }
     #crop, #edit, #download, #copy {
       display: none;
@@ -93,12 +107,12 @@
       color: #721c24;
     }
     @media (min-width: 768px) {
-      .button-group {
+      .upload-options, .button-group {
         flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
       }
-      input[type="file"], button {
+      button, .file-input-label {
         width: auto;
       }
       h1 {
@@ -110,7 +124,14 @@
 <body>
   <h1>Frame Picture Generator</h1>
   <div class="container">
-    <input type="file" id="upload" accept="image/*" />
+    <div class="upload-options">
+      <label for="cameraInput" class="file-input-label">Take Photo</label>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" />
+      
+      <label for="galleryInput" class="file-input-label">Choose from Gallery</label>
+      <input type="file" id="galleryInput" accept="image/*" />
+    </div>
+    
     <img id="image" style="display: none;" />
     <canvas id="canvas" style="display: none;"></canvas>
     <div class="button-group">
@@ -132,6 +153,8 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusMessage = document.getElementById('statusMessage');
+    const cameraInput = document.getElementById('cameraInput');
+    const galleryInput = document.getElementById('galleryInput');
 
     function showStatus(message, isSuccess) {
       statusMessage.textContent = message;
@@ -142,51 +165,7 @@
       }, 3000);
     }
 
-    // Improved mobile-friendly download function
-    function downloadImage() {
-      try {
-        canvas.toBlob(function(blob) {
-          if (window.navigator.msSaveOrOpenBlob) {
-            // For IE/Edge
-            window.navigator.msSaveOrOpenBlob(blob, 'framed-image.png');
-          } else {
-            // For other browsers
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = 'framed-image-' + new Date().getTime() + '.png';
-            link.href = url;
-            
-            // For iOS Safari
-            if (/(iP)/g.test(navigator.userAgent)) {
-              const reader = new FileReader();
-              reader.onloadend = function() {
-                const newWindow = window.open();
-                newWindow.document.write('<img src="' + reader.result + '" />');
-                showStatus("Image opened in new tab. Press and hold to save.", true);
-              };
-              reader.readAsDataURL(blob);
-              return;
-            }
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            // Clean up memory
-            setTimeout(() => {
-              URL.revokeObjectURL(url);
-            }, 100);
-          }
-          showStatus("Image downloaded successfully!", true);
-        }, 'image/png');
-      } catch (err) {
-        console.error('Download error:', err);
-        showStatus("Failed to download. Try pressing and holding the image to save.", false);
-      }
-    }
-
-    // Handle file selection with better mobile support
-    document.getElementById('upload').addEventListener('change', function (event) {
+    function handleFileSelect(event) {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -243,7 +222,57 @@
         tempImg.src = e.target.result;
       };
       reader.readAsDataURL(file);
-    });
+      
+      // Reset the input to allow selecting the same file again
+      event.target.value = '';
+    }
+
+    // Improved mobile-friendly download function
+    function downloadImage() {
+      try {
+        canvas.toBlob(function(blob) {
+          if (window.navigator.msSaveOrOpenBlob) {
+            // For IE/Edge
+            window.navigator.msSaveOrOpenBlob(blob, 'framed-image.png');
+          } else {
+            // For other browsers
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = 'framed-image-' + new Date().getTime() + '.png';
+            link.href = url;
+            
+            // For iOS Safari
+            if (/(iP)/g.test(navigator.userAgent)) {
+              const reader = new FileReader();
+              reader.onloadend = function() {
+                const newWindow = window.open();
+                newWindow.document.write('<img src="' + reader.result + '" />');
+                showStatus("Image opened in new tab. Press and hold to save.", true);
+              };
+              reader.readAsDataURL(blob);
+              return;
+            }
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up memory
+            setTimeout(() => {
+              URL.revokeObjectURL(url);
+            }, 100);
+          }
+          showStatus("Image downloaded successfully!", true);
+        }, 'image/png');
+      } catch (err) {
+        console.error('Download error:', err);
+        showStatus("Failed to download. Try pressing and holding the image to save.", false);
+      }
+    }
+
+    // Set up event listeners for both camera and gallery inputs
+    cameraInput.addEventListener('change', handleFileSelect);
+    galleryInput.addEventListener('change', handleFileSelect);
 
     document.getElementById('crop').addEventListener('click', function () {
       const croppedCanvas = cropper.getCroppedCanvas();
