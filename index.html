@@ -2,50 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Frame Picture Generator</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css" rel="stylesheet" />
   <style>
-    /* [Previous CSS styles remain exactly the same] */
     body {
       margin: 0;
-      font-family: 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       background: linear-gradient(135deg, #e0eafc, #cfdef3);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       min-height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
     }
     h1 {
-      margin: 20px;
+      margin: 20px 0;
       color: #333;
-      font-size: 2rem;
+      font-size: 1.5rem;
+      text-align: center;
     }
     .container {
       background: white;
-      padding: 30px;
+      padding: 20px;
       border-radius: 16px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-      max-width: 600px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       width: 100%;
+      max-width: 500px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 20px;
+      gap: 15px;
     }
     #image, #canvas {
       max-width: 100%;
-      max-height: 400px;
+      max-height: 60vh;
       border-radius: 12px;
+      touch-action: none;
     }
     input[type="file"], button {
-      font-size: 1rem;
-      padding: 10px 20px;
+      font-size: 0.9rem;
+      padding: 12px 20px;
       border: none;
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.3s ease;
+      width: 100%;
+      box-sizing: border-box;
+      -webkit-appearance: none;
     }
     input[type="file"] {
       background-color: #28a745;
@@ -55,24 +62,27 @@
       background-color: #007bff;
       color: white;
     }
-    button:hover {
+    button:hover, button:active {
       background-color: #0056b3;
-      transform: scale(1.05);
+      transform: scale(0.98);
     }
     #crop, #edit, #download, #copy {
       display: none;
     }
     .button-group {
       display: flex;
+      flex-direction: column;
       gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
+      width: 100%;
     }
     .status-message {
       margin-top: 10px;
       padding: 10px;
       border-radius: 5px;
       display: none;
+      width: 100%;
+      text-align: center;
+      font-size: 0.9rem;
     }
     .success {
       background-color: #d4edda;
@@ -82,12 +92,25 @@
       background-color: #f8d7da;
       color: #721c24;
     }
+    @media (min-width: 768px) {
+      .button-group {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      input[type="file"], button {
+        width: auto;
+      }
+      h1 {
+        font-size: 2rem;
+      }
+    }
   </style>
 </head>
 <body>
   <h1>Frame Picture Generator</h1>
   <div class="container">
-    <input type="file" id="upload" accept="image/*" />
+    <input type="file" id="upload" accept="image/*" capture="environment" />
     <img id="image" style="display: none;" />
     <canvas id="canvas" style="display: none;"></canvas>
     <div class="button-group">
@@ -119,60 +142,50 @@
       }, 3000);
     }
 
-    // Universal download function that works across all browsers
+    // Improved mobile-friendly download function
     function downloadImage() {
       try {
-        // Method 1: Standard download approach
-        const dataURL = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = 'framed-image-' + new Date().getTime() + '.png';
-        link.href = dataURL;
-        
-        // For Firefox and some mobile browsers
-        if (typeof link.download === 'undefined') {
-          // Method 2: Open in new tab as fallback
-          const newWindow = window.open();
-          newWindow.document.write(`<img src="${dataURL}" />`);
-          showStatus("Image opened in new tab. Right-click to save.", true);
-          return;
-        }
-        
-        // Method 1 execution
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showStatus("Image downloaded successfully!", true);
-        
-        // Clean up memory
-        setTimeout(() => {
-          URL.revokeObjectURL(dataURL);
-        }, 100);
-        
-      } catch (err) {
-        console.error('Download error:', err);
-        
-        // Method 3: Alternative approach for problematic browsers
-        try {
-          canvas.toBlob(function(blob) {
+        canvas.toBlob(function(blob) {
+          if (window.navigator.msSaveOrOpenBlob) {
+            // For IE/Edge
+            window.navigator.msSaveOrOpenBlob(blob, 'framed-image.png');
+          } else {
+            // For other browsers
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.download = 'framed-image-' + new Date().getTime() + '.png';
             link.href = url;
+            
+            // For iOS Safari
+            if (/(iP)/g.test(navigator.userAgent)) {
+              const reader = new FileReader();
+              reader.onloadend = function() {
+                const newWindow = window.open();
+                newWindow.document.write('<img src="' + reader.result + '" />');
+                showStatus("Image opened in new tab. Press and hold to save.", true);
+              };
+              reader.readAsDataURL(blob);
+              return;
+            }
+            
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            
+            // Clean up memory
             setTimeout(() => {
               URL.revokeObjectURL(url);
             }, 100);
-            showStatus("Image downloaded successfully!", true);
-          }, 'image/png');
-        } catch (err2) {
-          console.error('Alternative download error:', err2);
-          showStatus("Failed to download. Try right-clicking the image and selecting 'Save As'.", false);
-        }
+          }
+          showStatus("Image downloaded successfully!", true);
+        }, 'image/png');
+      } catch (err) {
+        console.error('Download error:', err);
+        showStatus("Failed to download. Try pressing and holding the image to save.", false);
       }
     }
 
+    // Handle file selection with better mobile support
     document.getElementById('upload').addEventListener('change', function (event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -181,7 +194,8 @@
       reader.onload = function (e) {
         const tempImg = new Image();
         tempImg.onload = function () {
-          const maxSize = 1200;
+          // Limit image size for mobile devices
+          const maxSize = 800;
           let width = tempImg.width;
           let height = tempImg.height;
           if (width > height && width > maxSize) {
@@ -208,9 +222,22 @@
           finalImageReady = false;
 
           if (cropper) cropper.destroy();
+          
+          // Mobile-friendly cropper settings
           cropper = new Cropper(image, {
             aspectRatio: 1,
-            viewMode: 1
+            viewMode: 1,
+            dragMode: 'move',
+            responsive: true,
+            restore: true,
+            guides: true,
+            center: true,
+            highlight: true,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+            minContainerWidth: 300,
+            minContainerHeight: 300
           });
         };
         tempImg.src = e.target.result;
@@ -261,7 +288,9 @@
       if (cropper) cropper.destroy();
       cropper = new Cropper(image, {
         aspectRatio: 1,
-        viewMode: 1
+        viewMode: 1,
+        dragMode: 'move',
+        responsive: true
       });
     });
 
@@ -282,11 +311,10 @@
       // First ensure the image is downloaded
       downloadImage();
       
-      // Then try to copy to clipboard
+      // Then try to copy to clipboard (works only on some mobile browsers)
       try {
         if (!navigator.clipboard || !navigator.clipboard.write) {
-          showStatus("Image saved! Clipboard not available in this browser.", true);
-          return;
+          return; // Skip on unsupported browsers
         }
 
         const blob = await new Promise(resolve => {
@@ -298,10 +326,23 @@
             'image/png': blob
           })
         ]);
-        showStatus("Image copied to clipboard and saved!", true);
+        showStatus("Image copied to clipboard!", true);
       } catch (err) {
         console.error('Clipboard error:', err);
-        showStatus("Image saved! Couldn't copy to clipboard.", true);
+      }
+    });
+
+    // Prevent zooming on mobile devices
+    document.addEventListener('touchmove', function (event) {
+      if (event.scale !== 1) { event.preventDefault(); }
+    }, { passive: false });
+
+    // Handle iOS orientation change
+    window.addEventListener('orientationchange', function() {
+      if (cropper) {
+        setTimeout(() => {
+          cropper.reset();
+        }, 300);
       }
     });
   </script>
